@@ -2,11 +2,13 @@
 FastAPI 主应用
 Main FastAPI application with CORS and logging
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import sys
+from sqlalchemy import text
 
+from app.database import engine
 from app.routers import auth, contact
 
 # 配置日志
@@ -32,7 +34,7 @@ app = FastAPI(
 # 配置 CORS 中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生产环境应该限制具体域名
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,9 +49,6 @@ logger.info("FastAPI 应用启动成功")
 
 @app.get("/", tags=["健康检查"])
 async def root():
-    """
-    根路径 - API 健康检查
-    """
     return {
         "message": "家族公司通讯录 API",
         "status": "running",
@@ -59,7 +58,10 @@ async def root():
 
 @app.get("/health", tags=["健康检查"])
 async def health_check():
-    """
-    健康检查端点
-    """
-    return {"status": "healthy"}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(status_code=503, detail=f"Database connection failed: {str(e)}")
