@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # MySQL 数据库
+  db:
+    image: mysql:8.0
+    container_name: family-contacts-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: contacts_db
+      MYSQL_ROOT_HOST: '%'
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      timeout: 5s
+      retries: 10
+      interval: 3s
+
+  # FastAPI 后端
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: family-contacts-backend
+    restart: always
+    ports:
+      - "8038:8000"
+    environment:
+      DATABASE_URL: mysql+pymysql://root:root@db:3306/contacts_db?charset=utf8mb4
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # React 前端
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: family-contacts-frontend
+    restart: always
+    ports:
+      - "3038:80"
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  default:
+    name: family-contacts-network

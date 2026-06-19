@@ -1,0 +1,14 @@
+# Docker 忽略文件
+node_modules/
+.git/
+.gitignore
+*.md
+.DS_Store
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.log
