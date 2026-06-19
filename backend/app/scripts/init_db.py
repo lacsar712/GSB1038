@@ -1,18 +1,18 @@
 """
 数据库初始化脚本
-Database initialization script with seed data
+Database initialization script with seed data and retry logic
 """
 import sys
+import time
 import logging
 from pathlib import Path
 
-# 添加父目录到 Python 路径
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
+from sqlalchemy import text
 from app.database import engine, Base, SessionLocal
 from app.models.user import User
 
-# 配置日志
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -20,29 +20,38 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def wait_for_database(max_retries: int = 30, retry_interval: int = 2):
+    for attempt in range(1, max_retries + 1):
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            logger.info("数据库连接成功")
+            return True
+        except Exception as e:
+            if attempt < max_retries:
+                logger.warning(f"数据库连接失败 (尝试 {attempt}/{max_retries}): {e}，{retry_interval}秒后重试...")
+                time.sleep(retry_interval)
+            else:
+                logger.error(f"数据库连接失败，已达最大重试次数: {e}")
+                raise
+
+
 def init_database():
-    """
-    初始化数据库
-    - 创建所有表
-    - 插入演示数据（包含中文）
-    """
+    wait_for_database()
+
     logger.info("开始初始化数据库...")
-    
-    # 创建所有表
+
     Base.metadata.create_all(bind=engine)
     logger.info("数据库表创建成功")
-    
-    # 创建会话
+
     db = SessionLocal()
-    
+
     try:
-        # 检查是否已有数据
         existing_users = db.query(User).count()
         if existing_users > 0:
             logger.info(f"数据库已有 {existing_users} 条记录，跳过初始化")
             return
-        
-        # 插入演示数据
+
         demo_users = [
             User(
                 username="admin",
@@ -90,17 +99,16 @@ def init_database():
                 email="sunqi@family.com"
             ),
         ]
-        
+
         db.add_all(demo_users)
         db.commit()
-        
+
         logger.info(f"成功插入 {len(demo_users)} 条演示数据")
         logger.info("数据库初始化完成！")
-        
-        # 显示插入的数据
+
         for user in demo_users:
             logger.info(f"  - {user.name} ({user.department} - {user.position})")
-        
+
     except Exception as e:
         logger.error(f"数据库初始化失败: {e}")
         db.rollback()
